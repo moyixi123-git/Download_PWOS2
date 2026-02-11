@@ -5657,10 +5657,7 @@ class DeveloperModeFunctions:
             safe_print(f"❌ 修改系统版本失败: {str(e)}")
             SystemLog.log(f"修改系统版本失败: {str(e)}", "错误")
 
-# ==================== AI助手 ====================
-#千问key：sk-f46d5d93338d4a2c9b241219f385ba0a
-#Deepseek Key：sk-25655b5cfbc542f1a543fa470b718791
-#=============================================
+# ==================== AI助手 =================
 class AIAssistant:
     @staticmethod
     def init() -> bool:
@@ -7750,3 +7747,4 @@ if __name__ == "__main__":
         SystemLog.log(f"系统崩溃: {e}\n{traceback.format_exc()}", "致命")
         input("按Enter键退出...")
        
+
