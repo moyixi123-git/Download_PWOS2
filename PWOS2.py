@@ -1,5 +1,4 @@
 # pwos2_complete_fixed.py
-
 import os
 import json
 import sys
@@ -5525,60 +5524,124 @@ class DeveloperModeFunctions:
     @staticmethod
     def memory_info() -> None:
         """内存信息（修复版）"""
+        
+        # 定义安全的打印函数（如果不存在）
+        def safe_print(text: str) -> None:
+            try:
+                print(text)
+            except:
+                print(str(text).encode('ascii', 'ignore').decode())
+        
         safe_print("\n===== 内存信息 =====")
-        psutil = SmartLibraryManagement.check_and_import("psutil", "内存监控库")
-        if not psutil:
+        
+        # 修复导入逻辑
+        try:
+            import psutil
+        except ImportError:
+            safe_print("❌ 未安装psutil库，无法获取内存信息")
+            safe_print("💡 请安装: pip install psutil")
             return
         
         try:
             memory = psutil.virtual_memory()
             swap = psutil.swap_memory()
             
-            safe_print("=== 物理内存 ===")
-            safe_print(f"总计: {memory.total // (1024**3)} GB")
-            safe_print(f"已使用: {memory.used // (1024**3)} GB ({memory.percent}%)")
-            safe_print(f"可用: {memory.available // (1024**3)} GB")
+            # 辅助函数：智能显示内存大小
+            def format_bytes(bytes_value: int) -> str:
+                """智能格式化字节大小"""
+                if bytes_value < 0:
+                    return "未知"
+                for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+                    if bytes_value < 1024.0:
+                        return f"{bytes_value:.1f} {unit}"
+                    bytes_value /= 1024.0
+                return f"{bytes_value:.1f} PB"
+            
+            safe_print("📊 === 物理内存 ===")
+            safe_print(f"总计: {format_bytes(memory.total)}")
+            safe_print(f"已使用: {format_bytes(memory.used)} ({memory.percent}%)")
+            safe_print(f"可用: {format_bytes(memory.available)}")
             
             # 兼容性处理：不同系统可能有不同的属性名
-            if hasattr(memory, 'cached'):
-                safe_print(f"缓存: {memory.cached // (1024**3)} GB")
-            elif hasattr(memory, 'buffers'):
-                safe_print(f"缓冲区: {memory.buffers // (1024**3)} GB")
+            if hasattr(memory, 'cached') and memory.cached > 0:
+                safe_print(f"缓存: {format_bytes(memory.cached)}")
+            elif hasattr(memory, 'buffers') and memory.buffers > 0:
+                safe_print(f"缓冲区: {format_bytes(memory.buffers)}")
+            elif hasattr(memory, 'cached') and hasattr(memory, 'buffers'):
+                # Linux系统
+                safe_print(f"缓存+缓冲区: {format_bytes(memory.cached + memory.buffers)}")
             
-            safe_print("\n=== 交换空间 ===")
-            safe_print(f"总计: {swap.total // (1024**3)} GB")
-            safe_print(f"已使用: {swap.used // (1024**3)} GB ({swap.percent}%)")
-            safe_print(f"可用: {swap.free // (1024**3)} GB")
+            safe_print("\n💾 === 交换空间 ===")
+            safe_print(f"总计: {format_bytes(swap.total)}")
+            safe_print(f"已使用: {format_bytes(swap.used)} ({swap.percent}%)")
+            safe_print(f"可用: {format_bytes(swap.free)}")
             
-            # 添加更多详细信息
-            safe_print("\n=== 详细信息 ===")
-            safe_print(f"活跃内存: {memory.active // (1024**3)} GB")
-            safe_print(f"非活跃内存: {memory.inactive // (1024**3)} GB" if hasattr(memory, 'inactive') else "")
-            safe_print(f"共享内存: {memory.shared // (1024**3)} GB" if hasattr(memory, 'shared') else "")
-            safe_print(f"脏页: {memory.dirty // (1024**3)} GB" if hasattr(memory, 'dirty') else "")
+            # 添加更多详细信息（带安全检查）
+            safe_print("\n🔍 === 详细信息 ===")
+            
+            # 活跃内存（Linux/Unix）
+            if hasattr(memory, 'active') and memory.active > 0:
+                safe_print(f"活跃内存: {format_bytes(memory.active)}")
+            
+            # 非活跃内存（Linux/Unix）  
+            if hasattr(memory, 'inactive') and memory.inactive > 0:
+                safe_print(f"非活跃内存: {format_bytes(memory.inactive)}")
+            
+            # 共享内存（Linux）
+            if hasattr(memory, 'shared') and memory.shared > 0:
+                safe_print(f"共享内存: {format_bytes(memory.shared)}")
+            
+            # 脏页（Linux）
+            if hasattr(memory, 'dirty') and memory.dirty > 0:
+                safe_print(f"脏页: {format_bytes(memory.dirty)}")
+            
+            # Windows特定的内存指标
+            if hasattr(memory, 'available') and hasattr(memory, 'total'):
+                available_percent = (memory.available / memory.total) * 100
+                safe_print(f"可用内存比例: {available_percent:.1f}%")
             
             # 内存使用建议
-            safe_print("\n=== 内存使用建议 ===")
+            safe_print("\n💡 === 内存使用建议 ===")
             if memory.percent > 90:
-                safe_print("🚨 紧急: 内存使用率超过90%，建议关闭不需要的程序！")
+                safe_print("🚨 紧急: 内存使用率超过90%，建议立即关闭不需要的程序！")
+                safe_print("   可能影响: 系统响应变慢，应用可能被强制关闭")
             elif memory.percent > 80:
                 safe_print("⚠️  警告: 内存使用率超过80%，建议监控内存使用")
+                safe_print("   建议: 检查是否有内存泄漏或关闭不必要的应用")
             elif memory.percent > 60:
                 safe_print("ℹ️  提示: 内存使用正常")
             else:
                 safe_print("✅ 优秀: 内存使用率良好")
             
             # 交换空间建议
-            if swap.percent > 50:
-                safe_print(f"⚠️  注意: 交换空间使用率较高 ({swap.percent}%)")
-                safe_print("   频繁使用交换空间会降低系统性能")
+            if swap.total > 0:  # 只在使用交换空间时显示
+                if swap.percent > 50:
+                    safe_print(f"⚠️  注意: 交换空间使用率较高 ({swap.percent}%)")
+                    safe_print("   频繁使用交换空间会显著降低系统性能")
+                    safe_print("   建议: 考虑增加物理内存")
+                elif swap.percent > 20:
+                    safe_print(f"ℹ️  提示: 交换空间使用率 {swap.percent}%")
+            else:
+                safe_print("ℹ️  提示: 系统未配置交换空间")
+            
+            # 系统内存压力评估
+            memory_pressure = (memory.used / memory.total) * 100
+            if memory_pressure > 90 and swap.percent > 50:
+                safe_print("⚠️  严重: 系统处于高内存压力状态！")
+                safe_print("   强烈建议: 重启系统或增加物理内存")
                 
+        except AttributeError as e:
+            safe_print(f"❌ 获取内存信息失败: 系统不支持该功能 ({str(e)})")
+            safe_print("💡 尝试更新psutil: pip install --upgrade psutil")
+        except PermissionError:
+            safe_print("❌ 权限不足，无法访问完整内存信息")
+            safe_print("💡 尝试以管理员/root权限运行")
         except Exception as e:
             safe_print(f"❌ 获取内存信息失败: {str(e)}")
             safe_print("💡 可能的原因:")
-            safe_print("   1. psutil库版本过旧")
+            safe_print("   1. psutil库版本过旧 (请升级: pip install --upgrade psutil)")
             safe_print("   2. 操作系统不支持某些功能")
-            safe_print("   3. 权限不足")
+            safe_print("   3. 系统资源暂时不可用")
 
     @staticmethod
     def modify_system_version() -> None:
@@ -5658,7 +5721,10 @@ class DeveloperModeFunctions:
             safe_print(f"❌ 修改系统版本失败: {str(e)}")
             SystemLog.log(f"修改系统版本失败: {str(e)}", "错误")
 
-# ==================== AI助手 =================
+# ==================== AI助手 ====================
+#千问key：sk-f46d5d93338d4a2c9b241219f385ba0a
+#Deepseek Key：sk-25655b5cfbc542f1a543fa470b718791
+#=============================================
 class AIAssistant:
     @staticmethod
     def init() -> bool:
@@ -6372,33 +6438,33 @@ class CommandLine:
         }
         
         self.linux_commands = {
-            "man": {"関数": self.show_help, "描述": "显示命令手册"},
-            "sle": {"関数": self.switch_style, "描述": "切换命令行风格"},
-            "clear": {"関数": self.clear_screen, "描述": "清除屏幕内容"},
-            "exit": {"関数": self.exit_command_line, "描述": "退出命令行模式"},
-            "reboot": {"関数": self.reboot_system, "描述": "重启命令行系统"},
-            "ls": {"関数": self.show_directory, "描述": "列出目录内容"},
-            "cd": {"関数": self.change_directory, "描述": "改变当前工作目录"},
-            "pwd": {"関数": self.show_current_directory, "描述": "显示当前工作目录"},
-            "mkdir": {"関数": self.create_directory, "描述": "创建新目录"},
-            "rmdir": {"関数": self.delete_directory, "描述": "删除空目录"},
-            "cp": {"関数": self.copy_file, "描述": "复制文件或目录"},
-            "mv": {"関数": self.move_file, "描述": "移动文件或目录"},
-            "rm": {"関数": self.delete_file, "描述": "删除文件"},
-            "cat": {"関数": self.view_file, "描述": "查看文件内容"},
-            "vi": {"関数": self.edit_file, "描述": "编辑文件内容"},
-            "nano": {"関数": self.edit_file, "描述": "编辑文件内容"},
-            "uname": {"関数": self.show_system_info, "描述": "显示系统信息"},
-            "date": {"関数": self.show_time, "描述": "显示当前时间"},
-            "cal": {"関数": self.show_date, "描述": "显示日历"},
-            "top": {"関数": self.show_status, "描述": "显示系统状态"},
-            "ps": {"関数": self.show_process_list, "描述": "显示当前进程"},
-            "history": {"関数": self.show_history, "描述": "显示命令历史"},
-            "systemctl": {"関数": self.show_system_services, "描述": "系统服务管理"},
-            "df": {"関数": self.show_disk_usage, "描述": "显示磁盘使用"},
-            "free": {"関数": self.show_memory_info, "描述": "显示内存信息"},
-            "switch": {"関数": self.switch_user_file, "描述": "切换文件"},
-            "lsuserfiles": {"関数": self.list_user_files, "描述": "列出用户文件"},
+            "man": {"函数": self.show_help, "描述": "显示命令手册"},
+            "sle": {"函数": self.switch_style, "描述": "切换命令行风格"},
+            "clear": {"函数": self.clear_screen, "描述": "清除屏幕内容"},
+            "exit": {"函数": self.exit_command_line, "描述": "退出命令行模式"},
+            "reboot": {"函数": self.reboot_system, "描述": "重启命令行系统"},
+            "ls": {"函数": self.show_directory, "描述": "列出目录内容"},
+            "cd": {"函数": self.change_directory, "描述": "改变当前工作目录"},
+            "pwd": {"函数": self.show_current_directory, "描述": "显示当前工作目录"},
+            "mkdir": {"函数": self.create_directory, "描述": "创建新目录"},
+            "rmdir": {"函数": self.delete_directory, "描述": "删除空目录"},
+            "cp": {"函数": self.copy_file, "描述": "复制文件或目录"},
+            "mv": {"函数": self.move_file, "描述": "移动文件或目录"},
+            "rm": {"函数": self.delete_file, "描述": "删除文件"},
+            "cat": {"函数": self.view_file, "描述": "查看文件内容"},
+            "vi": {"函数": self.edit_file, "描述": "编辑文件内容"},
+            "nano": {"函数": self.edit_file, "描述": "编辑文件内容"},
+            "uname": {"函数": self.show_system_info, "描述": "显示系统信息"},
+            "date": {"函数": self.show_time, "描述": "显示当前时间"},
+            "cal": {"函数": self.show_date, "描述": "显示日历"},
+            "top": {"函数": self.show_status, "描述": "显示系统状态"},
+            "ps": {"函数": self.show_process_list, "描述": "显示当前进程"},
+            "history": {"函数": self.show_history, "描述": "显示命令历史"},
+            "systemctl": {"函数": self.show_system_services, "描述": "系统服务管理"},
+            "df": {"函数": self.show_disk_usage, "描述": "显示磁盘使用"},
+            "free": {"函数": self.show_memory_info, "描述": "显示内存信息"},
+            "switch": {"函数": self.switch_user_file, "描述": "切换文件"},
+            "lsuserfiles": {"函数": self.list_user_files, "描述": "列出用户文件"},
         }
 
     def get_current_command_set(self) -> Dict[str, Dict[str, Any]]:
@@ -7747,6 +7813,3 @@ if __name__ == "__main__":
         safe_print(f"\n系统崩溃: {e}")
         SystemLog.log(f"系统崩溃: {e}\n{traceback.format_exc()}", "致命")
         input("按Enter键退出...")
-       
-
-
