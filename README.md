@@ -81,6 +81,7 @@ PWOS2/
    ```bash
    pip install requests psutil cryptography colorama prettytable
    ```
+   当然，在不安装依赖的情况下，您也能正常使用此系统，但是会有部分功能无法使用，系统里面也有内置自动安装依赖。
 2. 运行系统：
    ```bash
    python PWOS2.py
@@ -183,6 +184,7 @@ PWOS2/
    ```bash
    pip install requests psutil cryptography colorama prettytable
    ```
+   Of course, you can still use this system without installing dependencies, but some functions will be unavailable. The system also has a built-in automatic dependency installation feature.
 2. Run the system:
    ```bash
    python PWOS2.py
