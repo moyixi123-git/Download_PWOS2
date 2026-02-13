@@ -7875,4 +7875,3 @@ if __name__ == "__main__":
         safe_print(f"\n系统崩溃: {e}")
         SystemLog.log(f"系统崩溃: {e}\n{traceback.format_exc()}", "致命")
         input("按Enter键退出...")
-       
