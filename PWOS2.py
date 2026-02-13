@@ -4698,7 +4698,7 @@ class IntelligentUpdateSystem:
     
     @staticmethod
     def apply_special_update_safe(current_code: str, special_update_file: str, package_name: str = "未知") -> str:
-        """安全地应用特殊更新"""
+        """安全地应用特殊更新（支持替换和插入）"""
         try:
             with open(special_update_file, 'r', encoding='utf-8') as f:
                 special_code = f.read()
@@ -4706,10 +4706,11 @@ class IntelligentUpdateSystem:
             safe_print(f"🔄 处理特殊更新: {package_name}")
             
             # 安全检查
-            if len(special_code) > 100000:  # 限制大小
+            if len(special_code) > 100000:
                 safe_print("❌ 更新文件过大，可能存在风险")
                 return current_code
             
+            # ========== 1. 替换模式 ==========
             if "# REPLACE_SECTION" in special_code:
                 replace_content = special_code.split("# REPLACE_SECTION")[1]
                 
@@ -4725,21 +4726,81 @@ class IntelligentUpdateSystem:
                     return current_code
                 
                 if replace_target in current_code:
-                    # 备份原内容
-                    original_section = current_code[current_code.find(replace_target):current_code.find(replace_target) + len(replace_target)]
+                    # 统计出现次数，防止替换错地方
+                    count = current_code.count(replace_target)
+                    if count > 1:
+                        safe_print(f"⚠️  替换目标出现 {count} 次，将只替换第一次出现")
                     
-                    # 执行替换
-                    current_code = current_code.replace(replace_target, replace_with)
-                    safe_print(f"✅ 安全替换完成，替换长度: {len(replace_target)} 字符")
+                    current_code = current_code.replace(replace_target, replace_with, 1)  # 只替换第一次
+                    safe_print(f"✅ 安全替换完成")
                 else:
                     safe_print("⚠️  未找到替换目标")
+            
+            # ========== 2. 插入模式（修复版）==========
+            elif "# INSERT_AFTER" in special_code:
+                insert_content = special_code.split("# INSERT_AFTER")[1]
+                
+                if "# END_INSERT" not in insert_content:
+                    safe_print("❌ 更新格式错误：缺少 END_INSERT")
+                    return current_code
+                
+                insert_target = insert_content.split("# END_INSERT")[0].strip()
+                insert_code = insert_content.split("# END_INSERT")[1].strip()
+                
+                if not insert_target or len(insert_target) < 5:
+                    safe_print("❌ 插入目标过短")
+                    return current_code
+                
+                if not insert_code or len(insert_code) < 10:
+                    safe_print("❌ 插入代码过短")
+                    return current_code
+                
+                # 按行处理，精确定位
+                lines = current_code.split('\n')
+                target_line_index = -1
+                target_indent = ""
+                
+                for i, line in enumerate(lines):
+                    if insert_target in line and not line.strip().startswith('#'):  # 忽略注释
+                        target_line_index = i
+                        # 获取缩进
+                        target_indent = line[:len(line) - len(line.lstrip())]
+                        break
+                
+                if target_line_index != -1:
+                    # 处理插入代码的缩进
+                    indented_lines = []
+                    for insert_line in insert_code.split('\n'):
+                        if insert_line.strip():
+                            indented_lines.append(target_indent + insert_line)
+                        else:
+                            indented_lines.append('')
+                    
+                    # 在目标行后面插入
+                    for j, indented_line in enumerate(indented_lines):
+                        lines.insert(target_line_index + 1 + j, indented_line)
+                    
+                    current_code = '\n'.join(lines)
+                    safe_print(f"✅ 安全插入完成，位置: 第 {target_line_index + 1} 行后")
+                    safe_print(f"   缩进: {len(target_indent)} 空格")
+                    safe_print(f"   插入: {len(indented_lines)} 行")
+                else:
+                    safe_print("⚠️  未找到插入目标位置")
+            
+            # ========== 3. 追加模式 ==========
+            else:
+                # 简单的代码追加
+                current_code += "\n\n"
+                current_code += f"# ===== 更新包: {package_name} =====\n"
+                current_code += special_code.strip()
+                current_code += "\n# ===== 更新包结束 =====\n"
+                safe_print(f"✅ 代码追加完成")
             
             return current_code
             
         except Exception as e:
             safe_print(f"❌ 应用特殊更新失败: {str(e)}")
             return current_code
-
     
     @staticmethod
     def integrate_code_from_package(current_code: str, package_info: Dict[str, Any]) -> str:
@@ -6355,6 +6416,7 @@ class AIAssistant:
                 
         except Exception as e:
             safe_print(f"❌ AI分析失败: {str(e)}")
+
 # ==================== 命令行类 ====================
 class CommandLine:
     def __init__(self):
@@ -7813,3 +7875,4 @@ if __name__ == "__main__":
         safe_print(f"\n系统崩溃: {e}")
         SystemLog.log(f"系统崩溃: {e}\n{traceback.format_exc()}", "致命")
         input("按Enter键退出...")
+       
