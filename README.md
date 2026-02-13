@@ -47,7 +47,7 @@ PWOS2 是一个功能全面、安全可靠的Python用户管理系统，集成�
 
 🏗️ 技术架构
 
-· 语言：Python 3.6+
+· 语言：Python 3.6+，支持EXE(pyinstaller)打包
 · 架构：模块化分层设计（核心层、功能层、接口层、扩展层）
 · 数据存储：JSON格式，支持多文件管理
 · 安全标准：遵循OWASP Top 10防护、密码存储最佳实践
@@ -150,7 +150,7 @@ PWOS2 is a comprehensive and secure Python user management system that integrate
 
 🏗️ Technical Architecture
 
-· Language: Python 3.6+
+· Language: Python 3.6+，Support EXE (pyinstaller) packaging
 · Architecture: Modular layered design (Core layer, Function layer, Interface layer, Extension layer)
 · Data storage: JSON format, supports multi-file management
 · Security standards: Follows OWASP Top 10 protection, password storage best practices
