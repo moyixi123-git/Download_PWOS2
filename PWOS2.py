@@ -12236,19 +12236,141 @@ class CommandLine:
             safe_print("操作已取消")
 
     def show_system_services(self, params: Optional[str] = None) -> None:
-        """显示系统服务"""
-        safe_print("\n=== 系统服务 ===")
+        """显示系统服务（一个 def 搞定）"""
+        import os
+        import json
+        import time
+        import datetime
+        import platform
+        import subprocess
+        
+        # ===== 嵌套函数：只在里面用 =====
+        def check_firewall():
+            try:
+                if platform.system() == "Windows":
+                    r = subprocess.run(
+                        ["netsh", "advfirewall", "show", "allprofiles"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    return "ON" in r.stdout
+            except:
+                pass
+            return False
+        
+        def check_ai():
+            config = AIAssistant.load_config()
+            return config.get("enable_ai", False) if config else False
+        
+        def check_backup():
+            backup_dir = os.path.join(data_dir, "backups")
+            if not os.path.exists(backup_dir):
+                return False
+            return any(f.endswith('.json') for f in os.listdir(backup_dir))
+        
+        # ===== 服务列表 =====
         services = [
-            {"name": "用户管理服务", "status": "运行中", "uptime": "24天"},
-            {"name": "网络防火墙", "status": "运行中", "uptime": "5天"},
-            {"name": "AI助手", "status": "已停止", "uptime": "-"},
-            {"name": "备份服务", "status": "运行中", "uptime": "12小时"},
-            {"name": "日志服务", "status": "运行中", "uptime": "3天"}
+            {"name": "用户管理服务", "check": lambda: True},
+            {"name": "网络防火墙", "check": check_firewall},
+            {"name": "AI助手", "check": check_ai},
+            {"name": "备份服务", "check": check_backup},
+            {"name": "日志服务", "check": lambda: os.path.exists(log_file)},
         ]
         
-        for service in services:
-            status_icon = "🟢" if service["status"] == "运行中" else "🔴"
-            safe_print(f"{status_icon} {service['name']:<20} {service['status']:<10} 运行时间: {service['uptime']}")
+        # ===== 记录文件 =====
+        record_file = os.path.join(data_dir, "services_runtime.json")
+        
+        history = {}
+        if os.path.exists(record_file):
+            try:
+                with open(record_file, 'r', encoding='utf-8') as f:
+                    history = json.load(f)
+            except:
+                history = {}
+        
+        now = time.time()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        safe_print("\n" + "=" * 50)
+        safe_print("          系统服务状态")
+        safe_print("=" * 50)
+        
+        def fmt(sec):
+            if sec is None or sec == 0:
+                return "-"
+            if sec < 60:
+                return f"{int(sec)}秒"
+            elif sec < 3600:
+                return f"{int(sec / 60)}分钟"
+            elif sec < 86400:
+                return f"{int(sec / 3600)}小时"
+            else:
+                return f"{int(sec / 86400)}天"
+        
+        for svc in services:
+            name = svc["name"]
+            is_running = svc["check"]()
+            
+            # 初始化
+            if name not in history:
+                history[name] = {
+                    "first_start": None, "first_start_str": None,
+                    "last_start": None, "last_start_str": None,
+                    "last_shutdown": None, "last_shutdown_str": None,
+                    "total_seconds": 0, "status": "停止"
+                }
+            
+            # 更新状态
+            if is_running:
+                if history[name]["first_start"] is None:
+                    history[name]["first_start"] = now
+                    history[name]["first_start_str"] = now_str
+                
+                last_shutdown = history[name].get("last_shutdown", 0)
+                if last_shutdown and now - last_shutdown > 300:
+                    history[name]["last_start"] = now
+                    history[name]["last_start_str"] = now_str
+                
+                last_start = history[name].get("last_start", now)
+                if last_start is not None:
+                    current_run = now - last_start
+                    last_recorded = history[name].get("last_recorded", 0)
+                    history[name]["total_seconds"] = history[name].get("total_seconds", 0) + (current_run - last_recorded)
+                    history[name]["last_recorded"] = current_run
+                history[name]["status"] = "运行中"
+            else:
+                if history[name]["status"] == "运行中":
+                    history[name]["last_shutdown"] = now
+                    history[name]["last_shutdown_str"] = now_str
+                    history[name]["status"] = "停止"
+            
+            # 显示
+            icon = "🟢" if is_running else "🔴"
+            safe_print(f"\n{icon} {name}")
+            safe_print(f"   状态: {'运行中' if is_running else '已停止'}")
+            
+            if is_running:
+                last_start = history[name].get("last_start")
+                if last_start is not None:
+                    safe_print(f"   本次运行: {fmt(now - last_start)}")
+                else:
+                    safe_print(f"   本次运行: -")
+            else:
+                safe_print(f"   本次运行: 已停止")
+            
+            safe_print(f"   累计运行: {fmt(history[name].get('total_seconds', 0))}")
+            
+            if history[name]["first_start_str"]:
+                safe_print(f"   首次启动: {history[name]['first_start_str']}")
+            if history[name]["last_start_str"]:
+                safe_print(f"   本次启动: {history[name]['last_start_str']}")
+            if history[name]["last_shutdown_str"]:
+                safe_print(f"   最后关闭: {history[name]['last_shutdown_str']}")
+        
+        # 保存
+        with open(record_file, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        
+        safe_print("\n" + "=" * 50)
 
     def show_disk_usage(self, params: Optional[str] = None) -> None:
         """显示磁盘使用（Windows全兼容版）"""
@@ -15377,19 +15499,141 @@ class CommandLine:
             safe_print("操作已取消")
 
     def show_system_services(self, params: Optional[str] = None) -> None:
-        """显示系统服务"""
-        safe_print("\n=== 系统服务 ===")
+        """显示系统服务（一个 def 搞定）"""
+        import os
+        import json
+        import time
+        import datetime
+        import platform
+        import subprocess
+        
+        # ===== 嵌套函数：只在里面用 =====
+        def check_firewall():
+            try:
+                if platform.system() == "Windows":
+                    r = subprocess.run(
+                        ["netsh", "advfirewall", "show", "allprofiles"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    return "ON" in r.stdout
+            except:
+                pass
+            return False
+        
+        def check_ai():
+            config = AIAssistant.load_config()
+            return config.get("enable_ai", False) if config else False
+        
+        def check_backup():
+            backup_dir = os.path.join(data_dir, "backups")
+            if not os.path.exists(backup_dir):
+                return False
+            return any(f.endswith('.json') for f in os.listdir(backup_dir))
+        
+        # ===== 服务列表 =====
         services = [
-            {"name": "用户管理服务", "status": "运行中", "uptime": "24天"},
-            {"name": "网络防火墙", "status": "运行中", "uptime": "5天"},
-            {"name": "AI助手", "status": "已停止", "uptime": "-"},
-            {"name": "备份服务", "status": "运行中", "uptime": "12小时"},
-            {"name": "日志服务", "status": "运行中", "uptime": "3天"}
+            {"name": "用户管理服务", "check": lambda: True},
+            {"name": "网络防火墙", "check": check_firewall},
+            {"name": "AI助手", "check": check_ai},
+            {"name": "备份服务", "check": check_backup},
+            {"name": "日志服务", "check": lambda: os.path.exists(log_file)},
         ]
         
-        for service in services:
-            status_icon = "🟢" if service["status"] == "运行中" else "🔴"
-            safe_print(f"{status_icon} {service['name']:<20} {service['status']:<10} 运行时间: {service['uptime']}")
+        # ===== 记录文件 =====
+        record_file = os.path.join(data_dir, "services_runtime.json")
+        
+        history = {}
+        if os.path.exists(record_file):
+            try:
+                with open(record_file, 'r', encoding='utf-8') as f:
+                    history = json.load(f)
+            except:
+                history = {}
+        
+        now = time.time()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        safe_print("\n" + "=" * 50)
+        safe_print("          系统服务状态")
+        safe_print("=" * 50)
+        
+        def fmt(sec):
+            if sec is None or sec == 0:
+                return "-"
+            if sec < 60:
+                return f"{int(sec)}秒"
+            elif sec < 3600:
+                return f"{int(sec / 60)}分钟"
+            elif sec < 86400:
+                return f"{int(sec / 3600)}小时"
+            else:
+                return f"{int(sec / 86400)}天"
+        
+        for svc in services:
+            name = svc["name"]
+            is_running = svc["check"]()
+            
+            # 初始化
+            if name not in history:
+                history[name] = {
+                    "first_start": None, "first_start_str": None,
+                    "last_start": None, "last_start_str": None,
+                    "last_shutdown": None, "last_shutdown_str": None,
+                    "total_seconds": 0, "status": "停止"
+                }
+            
+            # 更新状态
+            if is_running:
+                if history[name]["first_start"] is None:
+                    history[name]["first_start"] = now
+                    history[name]["first_start_str"] = now_str
+                
+                last_shutdown = history[name].get("last_shutdown", 0)
+                if last_shutdown and now - last_shutdown > 300:
+                    history[name]["last_start"] = now
+                    history[name]["last_start_str"] = now_str
+                
+                last_start = history[name].get("last_start", now)
+                if last_start is not None:
+                    current_run = now - last_start
+                    last_recorded = history[name].get("last_recorded", 0)
+                    history[name]["total_seconds"] = history[name].get("total_seconds", 0) + (current_run - last_recorded)
+                    history[name]["last_recorded"] = current_run
+                history[name]["status"] = "运行中"
+            else:
+                if history[name]["status"] == "运行中":
+                    history[name]["last_shutdown"] = now
+                    history[name]["last_shutdown_str"] = now_str
+                    history[name]["status"] = "停止"
+            
+            # 显示
+            icon = "🟢" if is_running else "🔴"
+            safe_print(f"\n{icon} {name}")
+            safe_print(f"   状态: {'运行中' if is_running else '已停止'}")
+            
+            if is_running:
+                last_start = history[name].get("last_start")
+                if last_start is not None:
+                    safe_print(f"   本次运行: {fmt(now - last_start)}")
+                else:
+                    safe_print(f"   本次运行: -")
+            else:
+                safe_print(f"   本次运行: 已停止")
+            
+            safe_print(f"   累计运行: {fmt(history[name].get('total_seconds', 0))}")
+            
+            if history[name]["first_start_str"]:
+                safe_print(f"   首次启动: {history[name]['first_start_str']}")
+            if history[name]["last_start_str"]:
+                safe_print(f"   本次启动: {history[name]['last_start_str']}")
+            if history[name]["last_shutdown_str"]:
+                safe_print(f"   最后关闭: {history[name]['last_shutdown_str']}")
+        
+        # 保存
+        with open(record_file, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        
+        safe_print("\n" + "=" * 50)
 
     def show_disk_usage(self, params: Optional[str] = None) -> None:
         """显示磁盘使用（Windows全兼容版）"""
